@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Heart, Play, Pause, Volume2, VolumeX, X, Sparkles } from "lucide-react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import heroPoster from "../assets/hero-poster.jpg";
+import storyVideo from "../assets/0617.mp4";
+import heroBgVideo from "../assets/0617 (1)(1).mp4";
 import mem1 from "../assets/mem-1.jpeg";
 import mem2 from "../assets/mem-2.jpeg";
 import mem3 from "../assets/mem-3.jpeg";
@@ -16,6 +18,7 @@ import Mridul from "../assets/Mridul.jpeg";
 import image2002 from "../assets/2002.jpeg";
 import withGarima from "../assets/With-garima.png";
 import withMridul from "../assets/With-Mridul.png";
+import withLakshu from "../assets/With-Lakshu.png";
 
 import CoverFlow from "../components/CoverFlow";
 import PreloaderGate from "../components/PreloaderGate";
@@ -123,6 +126,8 @@ function Index() {
   const [authenticated, setAuthenticated] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [showStoryVideo, setShowStoryVideo] = useState(false);
+  const [wasMusicPlaying, setWasMusicPlaying] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -132,6 +137,30 @@ function Index() {
       videoRef.current.play().catch((err) => console.log("Video autoplay failed/blocked:", err));
     }
   }, [authenticated]);
+
+  const handlePlayVideo = () => {
+    if (playing) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      setPlaying(false);
+      setWasMusicPlaying(true);
+    } else {
+      setWasMusicPlaying(false);
+    }
+    setShowStoryVideo(true);
+  };
+
+  const handleCloseVideo = () => {
+    setShowStoryVideo(false);
+    if (wasMusicPlaying) {
+      if (audioRef.current) {
+        audioRef.current.play()
+          .then(() => setPlaying(true))
+          .catch((err) => console.log("Audio resume blocked:", err));
+      }
+    }
+  };
 
   const toggleMusic = () => {
     const a = audioRef.current;
@@ -164,17 +193,11 @@ function Index() {
             key="preloader-gate"
             onAccessGranted={() => {
               setAuthenticated(true);
-              if (audioRef.current) {
-                audioRef.current.play()
-                  .then(() => setPlaying(true))
-                  .catch((err) => console.log("Audio autoplay failed:", err));
-              }
+              // Music stays off by default until manually toggled
             }}
           />
         )}
       </AnimatePresence>
-
-      <MusicToggle playing={playing} onToggle={toggleMusic} />
 
       {authenticated && (
         <>
@@ -183,13 +206,16 @@ function Index() {
             {/* Video / poster */}
             <video
               ref={videoRef}
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover opacity-60 filter brightness-[0.7] contrast-[1.1] saturate-[0.85]"
               autoPlay muted loop playsInline
               poster={heroPoster}
-            >
-              {/* Replace /hero.mp4 with your uploaded video file in /public */}
-          <source src="/hero.mp4" type="video/mp4" />
-        </video>
+              src={heroBgVideo}
+              onLoadedMetadata={() => {
+                if (videoRef.current) {
+                  videoRef.current.currentTime = 0.6;
+                }
+              }}
+            />
         {/* Dark cinematic overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/90" />
         <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at center, transparent 0%, rgba(10,5,4,.85) 80%)" }} />
@@ -221,13 +247,13 @@ function Index() {
           </h1>
 
           <div className="mt-12 animate-fade-up" style={{ animationDelay: "1.1s" }}>
-            <a
-              href="#story"
-              className="btn-gold inline-flex items-center gap-3 rounded-full px-8 py-4 font-serif text-base sm:text-lg"
+            <button
+              onClick={handlePlayVideo}
+              className="btn-gold inline-flex items-center gap-3 rounded-full px-8 py-4 font-serif text-base sm:text-lg cursor-pointer"
             >
               <Play className="h-4 w-4 fill-current" />
               <span className="font-hindi">हमारी कहानी देखें</span>
-            </a>
+            </button>
           </div>
         </div>
 
@@ -256,7 +282,7 @@ function Index() {
             {[
               { year: "2002", title: "Wedding Day", sub: "जहाँ से सफर शुरू हुआ ❤️", img: image2002, position: "object-top" },
               { year: "2003", title: "Welcoming Elder Daughter", sub: "हमारी पहली खुशी ✨", img: withGarima, position: "object-top" },
-              { year: "2006", title: "Welcoming Younger Daughter", sub: "घर में और मुस्कानें आईं ❤️", img: mem3 },
+              { year: "2006", title: "Welcoming Younger Daughter", sub: "घर में और मुस्कानें आईं ❤️", img: withLakshu, position: "object-top" },
               { year: "2014", title: "Welcoming Sweetest Son", sub: "हमारा नन्हा राजकुमार 👑", img: withMridul, position: "object-top" },
               { year: "2026", title: "24 Years Together", sub: "एक खूबसूरत रिश्ता, हमेशा के लिए", img: mem1, position: "object-top" },
             ].map((it, i) => (
@@ -417,6 +443,46 @@ function Index() {
       <footer className="relative py-10 text-center text-warm-white/40 text-xs tracking-widest font-serif italic">
         — Made with <span className="text-rose-400">❤</span> for Mummy & Papa —
       </footer>
+
+      <AnimatePresence>
+        {showStoryVideo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="relative w-full max-w-4xl rounded-2xl border border-[#d4af37]/40 bg-[#0a0504] p-1.5 shadow-2xl"
+              style={{ boxShadow: "0 0 50px rgba(212,175,55,.2)" }}
+            >
+              {/* Close Button */}
+              <button
+                onClick={handleCloseVideo}
+                className="absolute top-4 right-4 z-10 rounded-full bg-black/60 p-2 text-[#f5d77a] hover:bg-black/80 hover:text-white transition-colors cursor-pointer"
+                aria-label="Close video"
+              >
+                <X className="h-6 w-6" />
+              </button>
+
+              {/* Video Element */}
+              <div className="aspect-video w-full overflow-hidden rounded-xl bg-black">
+                <video
+                  src={storyVideo}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="h-full w-full object-contain"
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
         </>
       )}
     </main>

@@ -6,6 +6,7 @@ type Props = { images: string[] };
 export default function CoverFlow({ images }: Props) {
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
   const n = images.length;
   const wrap = (i: number) => ((i % n) + n) % n;
 
@@ -14,9 +15,9 @@ export default function CoverFlow({ images }: Props) {
   // Auto-advance
   const pausedRef = useRef(false);
   useEffect(() => {
-    const id = setInterval(() => { if (!pausedRef.current) setIndex((i) => wrap(i + 1)); }, 4500);
+    const id = setInterval(() => { if (!pausedRef.current && dragOffset === 0) setIndex((i) => wrap(i + 1)); }, 4500);
     return () => clearInterval(id);
-  }, [n]);
+  }, [n, dragOffset]);
 
   // Keyboard
   useEffect(() => {
@@ -28,18 +29,27 @@ export default function CoverFlow({ images }: Props) {
     return () => window.removeEventListener("keydown", h);
   }, [go]);
 
-  // Drag
+  // Drag & Swipe
   const dragRef = useRef<{ x: number; active: boolean; moved: number } | null>(null);
+  const wasDraggingRef = useRef(false);
+
   const onPointerDown = (e: React.PointerEvent) => {
     pausedRef.current = true;
     dragRef.current = { x: e.clientX, active: true, moved: 0 };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
+
   const onPointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
     if (!d?.active) return;
-    d.moved = e.clientX - d.x;
+    const diff = e.clientX - d.x;
+    d.moved = diff;
+    setDragOffset(diff);
+    if (Math.abs(diff) > 5) {
+      wasDraggingRef.current = true;
+    }
   };
+
   const onPointerUp = () => {
     const d = dragRef.current;
     if (d?.active) {
@@ -48,8 +58,25 @@ export default function CoverFlow({ images }: Props) {
       else if (d.moved < -threshold) go(1);
     }
     dragRef.current = null;
-    setTimeout(() => { pausedRef.current = false; }, 600);
+    setDragOffset(0);
+    setTimeout(() => {
+      wasDraggingRef.current = false;
+      pausedRef.current = false;
+    }, 100);
   };
+
+  const onWheel = (e: React.WheelEvent) => {
+    if (Math.abs(e.deltaX) > 10) {
+      e.preventDefault();
+      if (!pausedRef.current) {
+        pausedRef.current = true;
+        go(e.deltaX > 0 ? 1 : -1);
+        setTimeout(() => { pausedRef.current = false; }, 400);
+      }
+    }
+  };
+
+  const isDragging = dragOffset !== 0;
 
   return (
     <div className="relative">
@@ -60,8 +87,9 @@ export default function CoverFlow({ images }: Props) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onWheel={onWheel}
         onMouseEnter={() => { pausedRef.current = true; }}
-        onMouseLeave={() => { pausedRef.current = false; }}
+        onMouseLeave={() => { if (!isDragging) pausedRef.current = false; }}
       >
         <div className="coverflow-track">
           {images.map((src, i) => {
@@ -69,29 +97,41 @@ export default function CoverFlow({ images }: Props) {
             // shortest wrap
             if (offset > n / 2) offset -= n;
             if (offset < -n / 2) offset += n;
-            const abs = Math.abs(offset);
+
+            // Calculate dynamic offset during drag
+            const dynamicOffset = offset - dragOffset / 180;
+            const abs = Math.abs(dynamicOffset);
             const visible = abs <= 3;
-            const isCenter = offset === 0;
-            const sign = offset === 0 ? 0 : offset > 0 ? 1 : -1;
-            const translateX = offset * 180;
-            const rotateY = isCenter ? 0 : -sign * 45;
-            const scale = isCenter ? 1.05 : Math.max(0.65, 1 - abs * 0.12);
-            const z = 100 - abs;
+            const isCenter = Math.abs(dynamicOffset) < 0.5;
+            const sign = dynamicOffset === 0 ? 0 : dynamicOffset > 0 ? 1 : -1;
+
+            const translateX = offset * 180 + dragOffset;
+            const rotateY = -sign * 45 * Math.min(1, Math.abs(dynamicOffset));
+            const scale = isCenter 
+              ? 1.05 * Math.max(0.9, 1 - Math.abs(dynamicOffset) * 0.12)
+              : Math.max(0.65, 1 - abs * 0.12);
+            const z = Math.round(100 - abs);
             const opacity = visible ? (isCenter ? 1 : Math.max(0.25, 1 - abs * 0.28)) : 0;
-            const blur = isCenter ? 0 : Math.min(4, abs * 1.2);
+            const blur = Math.abs(dynamicOffset) < 0.1 ? 0 : Math.min(4, abs * 1.2);
+
             return (
               <button
                 key={i}
                 type="button"
                 aria-label={`Memory ${i + 1}`}
                 className={`coverflow-card group ${isCenter ? "is-center" : ""}`}
-                onClick={() => { if (isCenter) setLightbox(src); else setIndex(i); }}
+                onClick={() => {
+                  if (wasDraggingRef.current) return;
+                  if (isCenter) setLightbox(src);
+                  else setIndex(i);
+                }}
                 style={{
                   transform: `translate(-50%, -50%) translateX(${translateX}px) scale(${scale}) rotateY(${rotateY}deg)`,
                   zIndex: z,
                   opacity,
                   pointerEvents: visible ? "auto" : "none",
                   filter: blur ? `blur(${blur}px) saturate(0.85)` : undefined,
+                  transition: isDragging ? "none" : undefined,
                 }}
               >
                 <div className="coverflow-img-wrap">
